@@ -1,3 +1,14 @@
+#include <TM1637Display.h>
+/*PIN DECLARATION*/
+#define CLK 2
+#define DIO 3
+#define b1 9
+#define b2 8
+#define b3 7
+#define slide_switch 5
+#define LED_pin 6
+#define buzzer_pin 10
+
 /*variable declaration*/
 
 /*time parameter*/
@@ -20,25 +31,19 @@ bool LEDState=0;
 void addClkSec();
 void addClkMin();
 void addClkHour();
-void write_to_display();
 
 void addAlarmMin();
 void addAlarmHour();
 
 void displayTime(int displayA, int displayB);
 
-/* I/O pin declaration */
-int LED_pin= 6;
-int buzzer_pin= 5;
-int b1=9;
-int b2=8;
-int b3=7;
-int slide_switch=5;
-
 /*debouncing variables*/
 unsigned long last_b1_millis=millis();
 unsigned long last_b2_millis=millis();
 unsigned long last_b3_millis=millis();
+
+/*Create a display object of type TM1637Display*/
+TM1637Display display = TM1637Display(CLK, DIO);
 
 void setup()
 {
@@ -68,7 +73,7 @@ ISR(TIMER1_COMPA_vect)          // timer compare interrupt service routine
 void loop() {
   //state 0 : clock
   if(state==0) { //state clock
-    if(digitalRead(b1)==HIGH && (millis()-last_b1_millis >=250)) {
+    if(digitalRead(b1)==HIGH && (millis()-last_b1_millis>=250)) {
       addClkHour();
       last_b1_millis=millis();
       }
@@ -88,9 +93,15 @@ void loop() {
   }
 
   //state 1 : alarm
-  if(state==1) {
-    if(digitalRead(b2)==HIGH) {addAlarmHour();}
-    if(digitalRead(b3)==HIGH){addAlarmMin();}
+  else if(state==1) {
+    if(digitalRead(b1)==HIGH&& last_b1_millis-millis()>=250) {
+      addAlarmHour();
+      last_b2_millis=millis();
+      }
+    if(digitalRead(b1)==HIGH&& last_b1_millis-millis()>=250) {
+      addAlarmMin();
+      last_b2_millis=millis();
+      }
     displayA=alarmHour;
     displayB=alarmMin;
   }
@@ -102,13 +113,13 @@ void loop() {
 
   //mematikan alarm
   if(isAlarmActive==1) {
-    if(digitalRead(b2)==HIGH && millis()-last_b2_millis>=250) {
+    if(digitalRead(b3)==HIGH && last_b3_millis-millis()>=250) {
       isAlarmActive=0;
-      LED_pin=0;
-      last_b2_millis=millis();
+      LEDState=0;
+      last_b3_millis=millis();
     }
   }
-  write_to_display();
+  displayTime(displayA,displayB);
 }
 
 void addClkSec() {
@@ -132,4 +143,9 @@ void addClkHour() {
   if(clkHour==24) {
     clkHour=0;
   }
+}
+
+void displayTime(int displayA,int displayB) {
+  int num = 100*displayA+displayB;
+  display.showNumberDecEx(num, 0b11100000, false, 4, 0);
 }
