@@ -1,4 +1,6 @@
 /*variable declaration*/
+
+/*time parameter*/
 int clkSec =0;
 int clkMin =0;
 int clkHour =0;
@@ -10,20 +12,33 @@ int displayA=0;
 int displayB=0;
 
 bool state=0;
-bool isAlarmOn=0; //apakah fitur alarm on
+bool isAlarmOn=0; //apakah fitur alarm dinyakan
 bool isAlarmActive=0; //apakah alarm menyala
+bool LEDState=0;
 
 /*function declaration*/
-addClkSec();
-addClkMin();
-addClkHour();
+void addClkSec();
+void addClkMin();
+void addClkHour();
+void write_to_display();
 
-addAlarmMin();
-addAlarmHour();
+void addAlarmMin();
+void addAlarmHour();
 
-displayTime(int displayA, int displayB);
+void displayTime(int displayA, int displayB);
 
+/* I/O pin declaration */
+int LED_pin= 6;
+int buzzer_pin= 5;
+int b1=9;
+int b2=8;
+int b3=7;
+int slide_switch=5;
 
+/*debouncing variables*/
+unsigned long last_b1_millis=millis();
+unsigned long last_b2_millis=millis();
+unsigned long last_b3_millis=millis();
 
 void setup()
 {
@@ -42,19 +57,31 @@ void setup()
 
 ISR(TIMER1_COMPA_vect)          // timer compare interrupt service routine
 {
-  addClockSec();
+  addClkSec();
+
+  if(isAlarmActive==1) {
+    digitalWrite(LED_pin, !LEDState);
+    digitalWrite(buzzer_pin, HIGH);
+  } 
 }
 
 void loop() {
   //state 0 : clock
   if(state==0) { //state clock
-    if(digitalRead(C)==HIGH) {addClkHour();}
-    if(digitalRead(D)=HIGH){addClkMin();}
-    if(digitalRead(B)==LOW) {
+    if(digitalRead(b1)==HIGH && (millis()-last_b1_millis >=250)) {
+      addClkHour();
+      last_b1_millis=millis();
+      }
+    if(digitalRead(b2)==HIGH && (millis()-last_b2_millis>=250)){
+      addClkMin();
+      last_b2_millis=millis();
+      }
+    if(digitalRead(b3)==LOW && (millis()-last_b3_millis>=250)) {
       displayA=clkHour;
       displayB=clkMin;
+      last_b3_millis=millis();
     }
-    else {
+    else { //ShowSec
       displayA=clkMin;
       displayB=clkSec;
     }
@@ -62,26 +89,47 @@ void loop() {
 
   //state 1 : alarm
   if(state==1) {
-    if(digitalRead(C)==HIGH) {addAlarmHour();}
-    if(digitalRead(D)=HIGH){addAlarmMin();}
+    if(digitalRead(b2)==HIGH) {addAlarmHour();}
+    if(digitalRead(b3)==HIGH){addAlarmMin();}
     displayA=alarmHour;
     displayB=alarmMin;
   }
 
-  //ALARM MENYALA
+  //KONDISI ALARM MENYALA
   if(clkHour==alarmHour && clkMin==alarmMin) {
     isAlarmActive=1;
-    
   }
-  
+
+  //mematikan alarm
+  if(isAlarmActive==1) {
+    if(digitalRead(b2)==HIGH && millis()-last_b2_millis>=250) {
+      isAlarmActive=0;
+      LED_pin=0;
+      last_b2_millis=millis();
+    }
+  }
+  write_to_display();
 }
 
 void addClkSec() {
   clkSec++;
   if(clkSec ==60) {
     clkSec=0;
-    addClkMin()
+    addClkMin();
   }
 }
 
+void addClkMin() {
+  clkMin++;
+  if(clkMin==60) {
+    clkMin=0;
+    addClkHour();
+  }
+}
 
+void addClkHour() {
+  clkHour++;
+  if(clkHour==24) {
+    clkHour=0;
+  }
+}
