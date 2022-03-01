@@ -1,7 +1,7 @@
 #include <TM1637Display.h>
 
 /*CARA KERJA
- * Jam terdiri dari 2 state : alarm dan clock
+ * Jam terdiri dari 3 state :stopwatch, alarm dan clock
  * STATE CLOCK
  * Untuk mengubah jam, tekan b1. Untuk mengubah menit, tekan b2
  * Untuk melihat jam:detik, tekan b3
@@ -16,6 +16,7 @@
  * Jika alarm menyala, jam akan berkedip dengan periode 0,5 detik
  * Untuk mematikan alarm, tekan b3. Setelah b3 ditekan, alarm akan mati serta fitur alarm akan mati
  * Untuk mengaktifkan fitur alarm, perlu ke state alarm lagi untuk mengaktifkannya
+ * STATE STOPWATCH
  */
 
 
