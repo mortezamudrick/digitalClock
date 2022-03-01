@@ -1,7 +1,7 @@
 #include <TM1637Display.h>
 
 /*CARA KERJA
- * Jam terdiri dari 3 state :stopwatch, alarm dan clock
+ * Jam terdiri dari 2 state : alarm dan clock
  * STATE CLOCK
  * Untuk mengubah jam, tekan b1. Untuk mengubah menit, tekan b2
  * Untuk melihat jam:detik, tekan b3
@@ -17,6 +17,11 @@
  * Untuk mematikan alarm, tekan b3. Setelah b3 ditekan, alarm akan mati serta fitur alarm akan mati
  * Untuk mengaktifkan fitur alarm, perlu ke state alarm lagi untuk mengaktifkannya
  * STATE STOPWATCH
+ * pada keadaan default, stopwatch akan menampilkan detik:sentidetik
+ * b1 : melihat menit dan detik
+ * b2 : pause/ start alarm
+ * b3 : reset alarm
+ * b4 : ganti state
  */
 
 
@@ -32,22 +37,28 @@
 /*variable declaration*/
 
 /*time parameter*/
+
+//clock parameter
 int clkCentiSec=0;
 int clkSec =0;
 int clkMin =0;
 int clkHour =0;
 
+//alarm time parameter
 int alarmMin=0;
 int alarmHour=0;
 
+//stopwatch time parameter
 int stopwatchCentiSec=0;
 int stopwatchSec=0;
 int stopwatchMin=0;
 
+//display variable
 int displayA=0;
 int displayB=0;
 int blinkTime=0;
 
+//boolean
 int state=0;
 bool isAlarmOn=0; //apakah fitur alarm dinyakan
 bool isAlarmActive=0; //apakah alarm menyala
@@ -111,25 +122,30 @@ ISR(TIMER1_COMPA_vect) {          // timer compare interrupt service routine
 
 void loop() {
 
+  //Jika b4 ditekan, ganti ke state berikutnya
   if( (digitalRead(b4)==HIGH) && (millis()-last_b4_millis>=250)) {
     state=(state+1)%3;
     last_b4_millis=millis();
   }
+  
   //state 0 : clock
   if(state==0) { //state clock
+    //jika b1 ditekan, jam pada jam digital ditambah
     if(digitalRead(b1)==HIGH && (millis()-last_b1_millis>=250)) {
       addClkHour();
       last_b1_millis=millis();
       }
+    //jika b2 ditekan, menit pada jam digital ditambah
     if(digitalRead(b2)==HIGH && (millis()-last_b2_millis>=250) ){
       addClkMin();
       last_b2_millis=millis();
       }
-    if(digitalRead(b3)==HIGH && !isAlarmActive) {
+     //jika b3 ditekan dan alarm tidak sedang aktif, tunjukkan menit dan detik
+    if(digitalRead(b3)==HIGH && !isAlarmActive && millis()-last_b3_millis>=250) {
       displayA=clkMin;
       displayB=clkSec;
       last_b3_millis=millis();
-    }
+    } //diluar itu, tunjukkan jam dan menit
     else { //ShowSec
       displayA=clkHour;
       displayB=clkMin;
@@ -142,9 +158,9 @@ void loop() {
     
     //Jika alarm menyala
     if(isAlarmActive==1) {
-      buzzerOn();
-      blinkTime=250;
-      if(digitalRead(b3)==HIGH && last_b3_millis-millis()>=250) { //mematikan alarm
+      buzzerOn(); //menyalakan buzzer
+      blinkTime=250; //jam berkedip tiap 250 ms
+      if(digitalRead(b3)==HIGH && last_b3_millis-millis()>=250) { //mematikan alarm dengan menekan b3
         isAlarmActive=0;
         isAlarmOn=0;
         last_b3_millis=millis();
@@ -158,23 +174,23 @@ void loop() {
 
   //state 1 : alarm
   else if(state==1) {
-    if(digitalRead(b1)==HIGH&& millis()-last_b1_millis >=250) {
+    if(digitalRead(b1)==HIGH&& millis()-last_b1_millis >=250) { //menambah jam alarm
       addAlarmHour();
       last_b1_millis=millis();
       }
-    if(digitalRead(b2)==HIGH&& millis()-last_b2_millis >=250) {
+    if(digitalRead(b2)==HIGH&& millis()-last_b2_millis >=250) { //menambah menit alarm
       addAlarmMin();
       last_b2_millis=millis();
       }
-    if(digitalRead(b3)==HIGH && millis()-last_b3_millis>250) {
+    if(digitalRead(b3)==HIGH && millis()-last_b3_millis>250) { //mengaktifkan/ menonaktifkan alarm
       isAlarmOn=!isAlarmOn;
       last_b3_millis=millis();
     }
-    if(isAlarmOn==1) {
+    if(isAlarmOn==1) { //jika alarm aktif, display berkedip setiap 500ms
       blinkTime=500;
     }
     else {
-      blinkTime=0;
+      blinkTime=0; //jika alarm tidak aktif, display tidak berkedip
     }
     
     displayA=alarmHour;
@@ -193,18 +209,16 @@ void loop() {
       stopwatchMin=0;
       stopwatchCentiSec=0;
     }
-    if(digitalRead(b1)==HIGH && millis()-last_b1_millis>250) {
+    if(digitalRead(b1)==HIGH && millis()-last_b1_millis>250) { //menunjukkan menit dan detik
       displayA=stopwatchMin;
       displayB=stopwatchSec;
     }
-    else {
+    else { //menunjukkan detik dan sentidetik
       displayA=stopwatchSec;
       displayB=stopwatchCentiSec;
     }
 
   }
-
-  
   displayTime(displayA,displayB,blinkTime);
 }
 
@@ -301,4 +315,3 @@ void buzzerOn() {
     buzzer_millis=millis();
    }
  }
-
