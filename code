@@ -1,17 +1,37 @@
 #include <TM1637Display.h>
+
+/*CARA KERJA
+ * Jam terdiri dari 2 state : alarm dan clock
+ * STATE CLOCK
+ * Untuk mengubah jam, tekan b1. Untuk mengubah menit, tekan b2
+ * Untuk melihat jam:detik, tekan b3
+ * Untuk pindah state ke alarm, tekan b4
+ * STATE ALARM
+ * Untuk mengatur jam dan menit alarm, tekan b1 dan b2
+ * Untuk mengaktifkan alarm, tekan b3
+ * Jika fitur alarm diaktifkan dan jam berada pada state alarm, jam akan berkedip dengan periode 1 detik
+ * Untuk pindah ke state clock tekan b4 lagi
+ * KEADAAN JIKA ALARM MENYALA
+ * Alarm hanya bisa aktif (menyala) pada state clock dan jika nilai waktu clock dan waktu alarm sama
+ * Jika alarm menyala, jam akan berkedip dengan periode 0,5 detik
+ * Untuk mematikan alarm, tekan b3. Setelah b3 ditekan, alarm akan mati serta fitur alarm akan mati
+ * Untuk mengaktifkan fitur alarm, perlu ke state alarm lagi untuk mengaktifkannya
+ */
+
+
 /*PIN DECLARATION*/
-#define CLK 2
-#define DIO 3
-#define b1 9
-#define b2 8
-#define b3 7
-#define slide_switch 5
-#define LED_pin 6
-#define buzzer_pin 10
+#define CLK 3
+#define DIO 2
+#define b1 A0
+#define b2 A1
+#define b3 A2
+#define b4 A3
+#define buzzer 5
 
 /*variable declaration*/
 
 /*time parameter*/
+int clkCentiSec=0;
 int clkSec =0;
 int clkMin =0;
 int clkHour =0;
@@ -19,15 +39,22 @@ int clkHour =0;
 int alarmMin=0;
 int alarmHour=0;
 
+int stopwatchCentiSec=0;
+int stopwatchSec=0;
+int stopwatchMin=0;
+
 int displayA=0;
 int displayB=0;
+int blinkTime=0;
 
-bool state=0;
+int state=0;
 bool isAlarmOn=0; //apakah fitur alarm dinyakan
 bool isAlarmActive=0; //apakah alarm menyala
-bool LEDState=0;
+bool displayOn=0;
+bool isStopwatchOn=0;
 
 /*function declaration*/
+void addClkCentiSec();
 void addClkSec();
 void addClkMin();
 void addClkHour();
@@ -35,91 +62,157 @@ void addClkHour();
 void addAlarmMin();
 void addAlarmHour();
 
-void displayTime(int displayA, int displayB);
+void addStopwatchCentiSec();
+void addStopwatchSec();
+void addStopwatchMin();
+
+void buzzerOn();
+
+void displayTime(int displayA, int displayB, int blinkTime);
 
 /*debouncing variables*/
 unsigned long last_b1_millis=millis();
 unsigned long last_b2_millis=millis();
 unsigned long last_b3_millis=millis();
-
+unsigned long last_b4_millis=millis();
+unsigned long blink_display_millis=millis();
+unsigned long buzzer_millis=millis();
 /*Create a display object of type TM1637Display*/
-TM1637Display display = TM1637Display(CLK, DIO);
+TM1637Display display(CLK, DIO);
 
 void setup()
-{
+{      
+  Serial.begin(9600);
   // initialize timer1 
   noInterrupts();           // disable all interrupts
   TCCR1A = 0;
   TCCR1B = 0;
   TCNT1  = 0;
 
-  OCR1A = 62500;            // compare match register 16MHz/256/1Hz
+  OCR1A = 625;            // compare match register 16MHz/256/100Hz
   TCCR1B |= (1 << WGM12);   // CTC mode
   TCCR1B |= (1 << CS12);    // 256 prescaler 
   TIMSK1 |= (1 << OCIE1A);  // enable timer compare interrupt
   interrupts();             // enable all interrupts
+  display.setBrightness(4);
+  pinMode(buzzer, OUTPUT); // Set buzzer - pin buzzer as an output
+
 }
 
-ISR(TIMER1_COMPA_vect)          // timer compare interrupt service routine
+ISR(TIMER1_COMPA_vect) {          // timer compare interrupt service routine
 {
-  addClkSec();
-
-  if(isAlarmActive==1) {
-    digitalWrite(LED_pin, !LEDState);
-    digitalWrite(buzzer_pin, HIGH);
-  } 
+  addClkCentiSec();
+  }
+  if(isStopwatchOn==1) {
+    addStopwatchCentiSec();
+  }
 }
 
 void loop() {
+
+  if( (digitalRead(b4)==HIGH) && (millis()-last_b4_millis>=250)) {
+    state=(state+1)%3;
+    last_b4_millis=millis();
+  }
   //state 0 : clock
   if(state==0) { //state clock
     if(digitalRead(b1)==HIGH && (millis()-last_b1_millis>=250)) {
       addClkHour();
       last_b1_millis=millis();
       }
-    if(digitalRead(b2)==HIGH && (millis()-last_b2_millis>=250)){
+    if(digitalRead(b2)==HIGH && (millis()-last_b2_millis>=250) ){
       addClkMin();
       last_b2_millis=millis();
       }
-    if(digitalRead(b3)==LOW && (millis()-last_b3_millis>=250)) {
-      displayA=clkHour;
-      displayB=clkMin;
+    if(digitalRead(b3)==HIGH && !isAlarmActive) {
+      displayA=clkMin;
+      displayB=clkSec;
       last_b3_millis=millis();
     }
     else { //ShowSec
-      displayA=clkMin;
-      displayB=clkSec;
+      displayA=clkHour;
+      displayB=clkMin;
     }
-  }
+    
+    //KONDISI ALARM MENYALA
+    if(clkHour==alarmHour && clkMin==alarmMin && isAlarmOn==1) {
+      isAlarmActive=1;
+    }
+    
+    //Jika alarm menyala
+    if(isAlarmActive==1) {
+      buzzerOn();
+      blinkTime=250;
+      if(digitalRead(b3)==HIGH && last_b3_millis-millis()>=250) { //mematikan alarm
+        isAlarmActive=0;
+        isAlarmOn=0;
+        last_b3_millis=millis();
+        noTone(buzzer);
+       }
+     }
+     else {
+      blinkTime=0;
+     }
+   }
 
   //state 1 : alarm
   else if(state==1) {
-    if(digitalRead(b1)==HIGH&& last_b1_millis-millis()>=250) {
+    if(digitalRead(b1)==HIGH&& millis()-last_b1_millis >=250) {
       addAlarmHour();
-      last_b2_millis=millis();
+      last_b1_millis=millis();
       }
-    if(digitalRead(b1)==HIGH&& last_b1_millis-millis()>=250) {
+    if(digitalRead(b2)==HIGH&& millis()-last_b2_millis >=250) {
       addAlarmMin();
       last_b2_millis=millis();
       }
+    if(digitalRead(b3)==HIGH && millis()-last_b3_millis>250) {
+      isAlarmOn=!isAlarmOn;
+      last_b3_millis=millis();
+    }
+    if(isAlarmOn==1) {
+      blinkTime=500;
+    }
+    else {
+      blinkTime=0;
+    }
+    
     displayA=alarmHour;
     displayB=alarmMin;
   }
-
-  //KONDISI ALARM MENYALA
-  if(clkHour==alarmHour && clkMin==alarmMin) {
-    isAlarmActive=1;
-  }
-
-  //mematikan alarm
-  if(isAlarmActive==1) {
-    if(digitalRead(b3)==HIGH && last_b3_millis-millis()>=250) {
-      isAlarmActive=0;
-      LEDState=0;
-      last_b3_millis=millis();
+  //state 3 : stopwatch
+  else if(state==2) {
+    blinkTime=0;
+    if(digitalRead(b2)==HIGH && millis()-last_b2_millis>250) { //pause/ start stopwatch
+      isStopwatchOn = !isStopwatchOn;
+      last_b2_millis=millis();
     }
+    else if(digitalRead(b3)==HIGH && millis()-last_b3_millis>250) { //reset Stopwatch
+      isStopwatchOn=0;
+      stopwatchSec=0;
+      stopwatchMin=0;
+      stopwatchCentiSec=0;
+    }
+    if(digitalRead(b1)==HIGH && millis()-last_b1_millis>250) {
+      displayA=stopwatchMin;
+      displayB=stopwatchSec;
+    }
+    else {
+      displayA=stopwatchSec;
+      displayB=stopwatchCentiSec;
+    }
+
   }
-  displayTime(displayA,displayB);
+
+  
+  displayTime(displayA,displayB,blinkTime);
+}
+
+void addClkCentiSec() {
+  clkCentiSec++;
+  if(clkCentiSec==100) {
+    clkCentiSec=0;
+    addClkSec();
+  }
 }
 
 void addClkSec() {
@@ -145,7 +238,66 @@ void addClkHour() {
   }
 }
 
-void displayTime(int displayA,int displayB) {
-  int num = 100*displayA+displayB;
-  display.showNumberDecEx(num, 0b11100000, false, 4, 0);
+void addAlarmMin() {
+  alarmMin++;
+  if(alarmMin==60) {
+    alarmMin=0;
+    addAlarmHour();
+  }
 }
+
+void addAlarmHour() {
+  alarmHour++;
+  if(alarmHour==24) {
+    alarmHour=0;
+  }
+}
+
+void addStopwatchCentiSec() {
+  stopwatchCentiSec++;
+  if(stopwatchCentiSec==100) {
+    stopwatchCentiSec=0;
+    addStopwatchSec();
+  }
+}
+
+void addStopwatchSec() {
+  stopwatchSec++;
+  if(stopwatchSec==60) {
+    stopwatchSec=0;
+    addStopwatchMin();
+  }
+}
+
+void addStopwatchMin() {
+  stopwatchMin++;
+  if(stopwatchMin==60) {
+    stopwatchMin=0;
+  }
+}
+
+void displayTime(int displayA,int displayB, int blinkTime) {
+  int num = 100*displayA+displayB;
+  if(blinkTime==0) {
+    displayOn=1;
+  }
+  else if (millis()-blink_display_millis>blinkTime) {
+    displayOn=!displayOn;
+    blink_display_millis=millis();
+  }
+  display.setBrightness(4,displayOn);
+  display.showNumberDecEx(num, 0b11100000, true, 4, 0);
+}
+
+void buzzerOn() {
+  if(millis()-buzzer_millis<=500) {
+    tone(buzzer,1000);
+  }
+  else if(millis()-buzzer_millis<=1000) {
+    noTone(buzzer);
+  }
+   else {
+    buzzer_millis=millis();
+   }
+ }
+
